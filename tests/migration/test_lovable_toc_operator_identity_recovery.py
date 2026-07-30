@@ -7504,7 +7504,7 @@ class ContractAndScopeTest(unittest.TestCase):
                     "binding_mismatch",
                 )
 
-    def test_recovery_profile_rejects_double_slash_python_path(self):
+    def test_recovery_profile_rejects_noncanonical_python_paths(self):
         profile = json.loads(
             (
                 MIGRATION
@@ -7512,12 +7512,27 @@ class ContractAndScopeTest(unittest.TestCase):
                 / "lovable-toc-operator-identity-recovery-profile.v2.json"
             ).read_text(encoding="ascii")
         )
-        profile["python_policy"]["absolute_path"] = (
-            "/" + profile["python_policy"]["absolute_path"]
-        )
-        with self.assertRaises(RECOVERY.RecoveryError) as raised:
-            RECOVERY._validate_profile(profile)
-        self.assertEqual(raised.exception.reason, "binding_mismatch")
+        canonical = profile["python_policy"]["absolute_path"]
+        duplicate_separator = "/" + canonical[1:].replace("/", "//", 1)
+        for label, path in (
+            ("root", "/"),
+            ("double_leading", "/" + canonical),
+            ("duplicate_separator", duplicate_separator),
+            ("dot_component", "/./" + canonical.lstrip("/")),
+            ("dotdot_component", "/tmp/../" + canonical.lstrip("/")),
+            ("trailing_separator", canonical + "/"),
+            ("nul", canonical + "\x00"),
+            ("surrogate", canonical + "\ud800"),
+            ("overlong", "/" + "a" * 4096),
+        ):
+            with self.subTest(label=label):
+                changed = copy.deepcopy(profile)
+                changed["python_policy"]["absolute_path"] = path
+                with self.assertRaises(RECOVERY.RecoveryError) as raised:
+                    RECOVERY._validate_profile(changed)
+                self.assertEqual(
+                    raised.exception.reason, "binding_mismatch"
+                )
 
     def test_public_diagnostics_are_fixed_and_never_contain_private_values(self):
         for reason in RECOVERY.RecoveryError.ALLOWED:

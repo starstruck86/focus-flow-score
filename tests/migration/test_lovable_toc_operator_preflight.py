@@ -373,16 +373,29 @@ class ProfileContractTests(unittest.TestCase):
                 PREFLIGHT.validate_profile(altered)
             self.assertEqual(caught.exception.reason, "execution_profile_invalid")
 
-    def test_profile_rejects_double_slash_python_path(self):
+    def test_profile_rejects_noncanonical_python_paths(self):
         profile = load_profile()
-        profile["python_policy"]["absolute_path"] = (
-            "/" + profile["python_policy"]["absolute_path"]
-        )
-        with self.assertRaises(PREFLIGHT.PreflightError) as caught:
-            PREFLIGHT.validate_profile(profile)
-        self.assertEqual(
-            caught.exception.reason, "execution_profile_invalid"
-        )
+        canonical = profile["python_policy"]["absolute_path"]
+        duplicate_separator = "/" + canonical[1:].replace("/", "//", 1)
+        for label, path in (
+            ("root", "/"),
+            ("double_leading", "/" + canonical),
+            ("duplicate_separator", duplicate_separator),
+            ("dot_component", "/./" + canonical.lstrip("/")),
+            ("dotdot_component", "/tmp/../" + canonical.lstrip("/")),
+            ("trailing_separator", canonical + "/"),
+            ("nul", canonical + "\x00"),
+            ("surrogate", canonical + "\ud800"),
+            ("overlong", "/" + "a" * 4096),
+        ):
+            with self.subTest(label=label):
+                changed = copy.deepcopy(profile)
+                changed["python_policy"]["absolute_path"] = path
+                with self.assertRaises(PREFLIGHT.PreflightError) as caught:
+                    PREFLIGHT.validate_profile(changed)
+                self.assertEqual(
+                    caught.exception.reason, "execution_profile_invalid"
+                )
 
     def test_profile_rejects_non_self_closing_legacy_bridge(self):
         profile = load_profile()

@@ -510,7 +510,9 @@ def _portable_path_key(value: str | os.PathLike[str]) -> str:
 def _validate_absolute_path_lexically(value: Any, repository: Path) -> str:
     path = _require_string(value, reason="approval_invalid")
     if (
-        "\x00" in path
+        len(path) > 4096
+        or path == "/"
+        or "\x00" in path
         or not path.startswith("/")
         or path.startswith("//")
         or os.path.normpath(path) != path
@@ -649,7 +651,10 @@ def validate_profile(value: Any) -> dict[str, Any]:
     _require_int(python["exact_uid"], reason=reason)
     _require_int(python["exact_gid"], reason=reason)
     if (
-        python["exact_mode"] != "0755"
+        len(python["absolute_path"]) > 4096
+        or python["absolute_path"] == "/"
+        or "\x00" in python["absolute_path"]
+        or python["exact_mode"] != "0755"
         or type(python["exact_nlink"]) is not int
         or python["exact_nlink"] != 1
         or python["executable_required"] is not True

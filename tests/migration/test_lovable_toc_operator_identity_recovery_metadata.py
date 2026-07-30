@@ -12,6 +12,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import socket
 import stat
 import subprocess
@@ -1191,6 +1192,262 @@ class MetadataProbeTestCase(unittest.TestCase):
 
 
 class PublicContractAndApprovalTest(unittest.TestCase):
+    def test_consumed_absolute_path_schemas_exclude_unusable_lexemes(self):
+        ordinary_schema_names = (
+            "lovable-toc-operator-execution-profile-approval.schema.json",
+            "lovable-toc-operator-execution-profile.schema.json",
+        )
+        unicode_schema_names = (
+            "lovable-toc-operator-identity-recovery-approval.schema.json",
+            "lovable-toc-operator-identity-recovery-approval.v2.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-approval.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-approval.v2.schema.json",
+            "lovable-toc-operator-identity-recovery-metadata-result.schema.json",
+        )
+        definitions = {}
+        for name in ordinary_schema_names + unicode_schema_names:
+            schema = json.loads(
+                (
+                    MIGRATION / "verification" / name
+                ).read_text(encoding="ascii")
+            )
+            definitions[name] = schema["$defs"]["absolutePath"]
+
+        path_pattern_body = (
+            "/(?![.]{1,2}(?:/|(?![\\s\\S])))"
+            "[^/\\u0000]+"
+            "(?:/(?![.]{1,2}(?:/|(?![\\s\\S])))"
+            "[^/\\u0000]+)*(?![\\s\\S])"
+        )
+        unicode_pattern = (
+            "^(?![\\s\\S]*[\\uD800-\\uDFFF])" + path_pattern_body
+        )
+        ordinary_pattern = (
+            "^(?![\\s\\S]*[^\\u0000-\\u007f])" + path_pattern_body
+        )
+        for name in ordinary_schema_names:
+            self.assertEqual(
+                definitions[name],
+                {
+                    "maxLength": 4096,
+                    "minLength": 2,
+                    "pattern": ordinary_pattern,
+                    "type": "string",
+                },
+            )
+        for name in unicode_schema_names:
+            self.assertEqual(
+                definitions[name],
+                {
+                    "maxLength": 4096,
+                    "minLength": 2,
+                    "pattern": unicode_pattern,
+                    "type": "string",
+                },
+            )
+
+        expected_reference_counts = {
+            "lovable-toc-operator-execution-profile-approval.schema.json": 2,
+            "lovable-toc-operator-execution-profile.schema.json": 2,
+            "lovable-toc-operator-identity-recovery-approval.schema.json": 5,
+            "lovable-toc-operator-identity-recovery-approval.v2.schema.json": 5,
+            "lovable-toc-operator-identity-recovery-metadata-approval.schema.json": 2,
+            "lovable-toc-operator-identity-recovery-metadata-approval.v2.schema.json": 2,
+            "lovable-toc-operator-identity-recovery-metadata-result.schema.json": 3,
+        }
+
+        def count_absolute_path_references(value) -> int:
+            if type(value) is dict:
+                return (
+                    int(value.get("$ref") == "#/$defs/absolutePath")
+                    + sum(
+                        count_absolute_path_references(child)
+                        for child in value.values()
+                    )
+                )
+            if type(value) is list:
+                return sum(
+                    count_absolute_path_references(child)
+                    for child in value
+                )
+            return 0
+
+        for name, expected_count in expected_reference_counts.items():
+            schema = json.loads(
+                (
+                    MIGRATION / "verification" / name
+                ).read_text(encoding="ascii")
+            )
+            self.assertEqual(
+                count_absolute_path_references(schema),
+                expected_count,
+                name,
+            )
+
+        def schema_accepts(definition, value: str) -> bool:
+            return (
+                definition["minLength"]
+                <= len(value)
+                <= definition["maxLength"]
+                and re.search(definition["pattern"], value) is not None
+            )
+
+        ordinary_definition = definitions[ordinary_schema_names[0]]
+        unicode_definition = definitions[unicode_schema_names[0]]
+        for value in (
+            "/private/tmp/example",
+            "/private/tmp/.hidden",
+            "/private/tmp/...",
+            "/private/tmp/MixedCase",
+            "/private/tmp/mixedcase",
+            "/private/tmp/name with spaces",
+            "/private/tmp/line\nname",
+            "/private/tmp/.\n",
+            "/private/tmp/..\n",
+            "/" + "a" * 4095,
+        ):
+            with self.subTest(valid=value):
+                self.assertTrue(
+                    schema_accepts(ordinary_definition, value)
+                )
+                self.assertTrue(
+                    schema_accepts(unicode_definition, value)
+                )
+                self.assertEqual(
+                    METADATA.PREFLIGHT._validate_absolute_path_lexically(
+                        value, ROOT
+                    ),
+                    value,
+                )
+                self.assertEqual(
+                    METADATA._validate_absolute_literal(value, ROOT),
+                    value,
+                )
+        for value in (
+            "/private/tmp/Caf\u00e9",
+            "/private/tmp/Cafe\u0301",
+            "/private/tmp/.\u2028",
+            "/private/tmp/..\u2029",
+        ):
+            with self.subTest(valid_unicode=value):
+                self.assertFalse(
+                    schema_accepts(ordinary_definition, value)
+                )
+                self.assertTrue(
+                    schema_accepts(unicode_definition, value)
+                )
+                with self.assertRaises(METADATA.PREFLIGHT.PreflightError):
+                    METADATA.PREFLIGHT._validate_absolute_path_lexically(
+                        value, ROOT
+                    )
+                self.assertEqual(
+                    METADATA._validate_absolute_literal(value, ROOT),
+                    value,
+                )
+                self.assertEqual(
+                    METADATA.RECOVERY._absolute_private_path(value, ROOT),
+                    Path(value),
+                )
+        for value in (
+            "",
+            "/",
+            "private/tmp/example",
+            "//private/tmp/example",
+            "///private/tmp/example",
+            "/private//tmp/example",
+            "/private/./tmp/example",
+            "/private/tmp/../example",
+            "/./private/tmp/example",
+            "/../private/tmp/example",
+            "/private/tmp/example/",
+            "/private/\x00/tmp",
+            "/private/\ud800/tmp",
+            "/safe\n/../target",
+            "/safe\r/./target",
+            "/safe\u2028/../target",
+            "/safe\u2029/./target",
+            "/" + "a" * 4096,
+        ):
+            with self.subTest(invalid=repr(value)):
+                self.assertFalse(
+                    schema_accepts(ordinary_definition, value)
+                )
+                self.assertFalse(
+                    schema_accepts(unicode_definition, value)
+                )
+                for validator, error in (
+                    (
+                        lambda candidate: (
+                            METADATA.PREFLIGHT
+                            ._validate_absolute_path_lexically(
+                                candidate, ROOT
+                            )
+                        ),
+                        METADATA.PREFLIGHT.PreflightError,
+                    ),
+                    (
+                        lambda candidate: (
+                            METADATA.RECOVERY._absolute_private_path(
+                                candidate, ROOT
+                            )
+                        ),
+                        METADATA.RECOVERY.RecoveryError,
+                    ),
+                    (
+                        lambda candidate: (
+                            METADATA._validate_absolute_literal(
+                                candidate, ROOT
+                            )
+                        ),
+                        METADATA.MetadataProbeError,
+                    ),
+                    (
+                        lambda candidate: METADATA._private_path(
+                            candidate, ROOT
+                        ),
+                        METADATA.MetadataProbeError,
+                    ),
+                ):
+                    with self.assertRaises(error):
+                        validator(value)
+
+        profile_schema_const_counts = {
+            "lovable-toc-operator-identity-recovery-profile.schema.json": 2,
+            "lovable-toc-operator-identity-recovery-profile.v2.schema.json": 2,
+            "lovable-toc-operator-identity-recovery-metadata-profile.schema.json": 1,
+            "lovable-toc-operator-identity-recovery-metadata-profile.v2.schema.json": 1,
+        }
+
+        def absolute_path_constants(value) -> list[str]:
+            found: list[str] = []
+            if type(value) is dict:
+                absolute_path = value.get("absolute_path")
+                if (
+                    type(absolute_path) is dict
+                    and type(absolute_path.get("const")) is str
+                ):
+                    found.append(absolute_path["const"])
+                for child in value.values():
+                    found.extend(absolute_path_constants(child))
+            elif type(value) is list:
+                for child in value:
+                    found.extend(absolute_path_constants(child))
+            return found
+
+        for name, expected_count in profile_schema_const_counts.items():
+            schema = json.loads(
+                (
+                    MIGRATION / "verification" / name
+                ).read_text(encoding="ascii")
+            )
+            constants = absolute_path_constants(schema)
+            self.assertEqual(len(constants), expected_count, name)
+            for value in constants:
+                self.assertTrue(
+                    schema_accepts(unicode_definition, value),
+                    (name, value),
+                )
+
     def test_private_literals_reject_repository_case_and_unicode_aliases(self):
         repository = Path("/private/tmp/Metadata-Repository-Caf\u00e9")
         aliases = (
@@ -3960,14 +4217,31 @@ class PublicContractAndApprovalTest(unittest.TestCase):
                     "binding_mismatch",
                 )
 
-    def test_metadata_profile_rejects_double_slash_python_path(self):
+    def test_metadata_profile_rejects_noncanonical_python_paths(self):
         profile = load_metadata_profile()
-        profile["python_policy"]["absolute_path"] = (
-            "/" + profile["python_policy"]["absolute_path"]
-        )
-        with self.assertRaises(METADATA.MetadataProbeError) as raised:
-            METADATA._validate_profile(profile)
-        self.assertEqual(raised.exception.reason, "binding_mismatch")
+        canonical = profile["python_policy"]["absolute_path"]
+        duplicate_separator = "/" + canonical[1:].replace("/", "//", 1)
+        for label, path in (
+            ("root", "/"),
+            ("double_leading", "/" + canonical),
+            ("duplicate_separator", duplicate_separator),
+            ("dot_component", "/./" + canonical.lstrip("/")),
+            ("dotdot_component", "/tmp/../" + canonical.lstrip("/")),
+            ("trailing_separator", canonical + "/"),
+            ("nul", canonical + "\x00"),
+            ("surrogate", canonical + "\ud800"),
+            ("overlong", "/" + "a" * 4096),
+        ):
+            with self.subTest(label=label):
+                changed = copy.deepcopy(profile)
+                changed["python_policy"]["absolute_path"] = path
+                with self.assertRaises(
+                    METADATA.MetadataProbeError
+                ) as raised:
+                    METADATA._validate_profile(changed)
+                self.assertEqual(
+                    raised.exception.reason, "binding_mismatch"
+                )
 
     def test_reviewed_python_closure_contains_every_local_ast_import(self):
         profile = load_metadata_profile()

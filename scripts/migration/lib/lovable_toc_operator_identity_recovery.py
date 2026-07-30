@@ -811,8 +811,22 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     )
     if (
         type(python_policy["absolute_path"]) is not str
+        or not python_policy["absolute_path"]
+        or len(python_policy["absolute_path"]) > 4096
+        or python_policy["absolute_path"] == "/"
         or not python_policy["absolute_path"].startswith("/")
         or python_policy["absolute_path"].startswith("//")
+        or "\x00" in python_policy["absolute_path"]
+        or any(
+            0xD800 <= ord(character) <= 0xDFFF
+            for character in python_policy["absolute_path"]
+        )
+        or os.path.abspath(python_policy["absolute_path"])
+        != python_policy["absolute_path"]
+        or any(
+            part in {"", ".", ".."}
+            for part in Path(python_policy["absolute_path"]).parts
+        )
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
@@ -3375,9 +3389,14 @@ def _validate_approval(
         if (
             type(value) is not str
             or len(value) > 4096
+            or value == "/"
             or not value.startswith("/")
             or value.startswith("//")
             or "\x00" in value
+            or any(
+                0xD800 <= ord(character) <= 0xDFFF
+                for character in value
+            )
             or os.path.abspath(value) != value
             or any(part in {"", ".", ".."} for part in Path(value).parts)
         ):
@@ -3814,10 +3833,16 @@ def _absolute_private_path(value: Any, repository: Path) -> Path:
     if (
         type(value) is not str
         or len(value) > 4096
+        or not value
+        or value == "/"
         or not value.startswith("/")
         or value.startswith("//")
         or "\x00" in value
+        or any(
+            0xD800 <= ord(character) <= 0xDFFF for character in value
+        )
         or os.path.abspath(value) != value
+        or any(part in {"", ".", ".."} for part in Path(value).parts)
     ):
         _fail("binding_mismatch")
     path = Path(value)

@@ -771,8 +771,23 @@ def _validate_profile(profile: Mapping[str, Any]) -> Mapping[str, Any]:
     )
     if (
         type(python_policy["absolute_path"]) is not str
+        or not python_policy["absolute_path"]
+        or len(python_policy["absolute_path"])
+        > MAX_PRIVATE_PATH_CHARACTERS
+        or python_policy["absolute_path"] == "/"
         or not python_policy["absolute_path"].startswith("/")
         or python_policy["absolute_path"].startswith("//")
+        or "\x00" in python_policy["absolute_path"]
+        or any(
+            0xD800 <= ord(character) <= 0xDFFF
+            for character in python_policy["absolute_path"]
+        )
+        or os.path.abspath(python_policy["absolute_path"])
+        != python_policy["absolute_path"]
+        or any(
+            part in {"", ".", ".."}
+            for part in Path(python_policy["absolute_path"]).parts
+        )
         or type(python_policy["exact_uid"]) is not int
         or type(python_policy["exact_gid"]) is not int
         or type(python_policy["exact_mode"]) is not str
@@ -1159,10 +1174,15 @@ def _parse_expiry(value: Any) -> dt.datetime:
 def _validate_absolute_literal(value: Any, repository: Path) -> str:
     if (
         type(value) is not str
+        or not value
+        or value == "/"
         or not value.startswith("/")
         or value.startswith("//")
         or len(value) > MAX_PRIVATE_PATH_CHARACTERS
         or "\x00" in value
+        or any(
+            0xD800 <= ord(character) <= 0xDFFF for character in value
+        )
         or os.path.abspath(value) != value
         or any(part in {"", ".", ".."} for part in Path(value).parts)
     ):
@@ -3678,15 +3698,22 @@ def authorize_consequence(
 def _private_path(value: Any, repository: Path) -> Path:
     if (
         type(value) is not str
+        or not value
+        or value == "/"
         or not value.startswith("/")
         or value.startswith("//")
         or len(value) > MAX_PRIVATE_PATH_CHARACTERS
         or "\x00" in value
+        or any(
+            0xD800 <= ord(character) <= 0xDFFF for character in value
+        )
     ):
         _fail("private_chain_invalid")
     if os.path.abspath(value) != value:
         _fail("private_chain_invalid")
     path = Path(value)
+    if any(part in {"", ".", ".."} for part in path.parts):
+        _fail("private_chain_invalid")
     try:
         repository_key = RECOVERY._portable_private_path_key(
             repository.as_posix()
