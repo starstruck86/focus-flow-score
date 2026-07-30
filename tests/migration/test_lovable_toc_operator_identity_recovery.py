@@ -6,6 +6,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import runpy
 import socket
 import stat
 import subprocess
@@ -3083,6 +3084,61 @@ class AuthorizationAndApprovalTest(RecoveryTestCase):
                 ).decode("ascii")
                 self._reseal_embedded_review(attestation)
                 self._assert_review_rejected_pre_private(attestation)
+
+    def test_recovery_prompt_matches_pinned_wrapper_contract(self):
+        wrapper_path = (
+            Path.home()
+            / ".codex"
+            / "skills"
+            / "independent-claude-audit"
+            / "scripts"
+            / "claude_audit.py"
+        )
+        if not wrapper_path.is_file():
+            self.skipTest("pinned independent Claude wrapper unavailable")
+        wrapper_data = wrapper_path.read_bytes()
+        self.assertEqual(
+            sha(wrapper_data),
+            RECOVERY.REQUIRED_AUDIT_WRAPPER_SHA256,
+        )
+        self.assertEqual(
+            sha(wrapper_data),
+            DRIVER._REQUIRED_AUDIT_WRAPPER_SHA256,
+        )
+        wrapper_namespace = runpy.run_path(os.fspath(wrapper_path))
+        build_prompt = wrapper_namespace.get("build_prompt")
+        self.assertTrue(callable(build_prompt))
+        facts = {
+            "base": AUDIT_BASE_SHA,
+            "changed_name_status": ["M\tsynthetic.py"],
+            "ci_run": "30495592620",
+            "head": "a" * 40,
+            "head_tree": "b" * 40,
+            "merge_base": AUDIT_BASE_SHA,
+            "pr": "36",
+        }
+        specification = "Neutral synthetic audit specification.\n"
+        expected = build_prompt(
+            repo_name="focus-flow-score",
+            base=facts["base"],
+            head=facts["head"],
+            pr=facts["pr"],
+            ci_run=facts["ci_run"],
+            facts=facts,
+            spec=specification,
+        )
+        self.assertEqual(
+            RECOVERY._expected_audit_prompt(
+                facts, specification, "focus-flow-score"
+            ),
+            expected,
+        )
+        self.assertEqual(
+            DRIVER._expected_audit_prompt(
+                facts, specification, "focus-flow-score"
+            ),
+            expected,
+        )
 
     def test_embedded_audit_cross_bindings_fail_closed_after_rehash(self):
         def fresh():

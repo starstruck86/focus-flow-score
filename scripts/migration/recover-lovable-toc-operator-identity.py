@@ -1969,7 +1969,6 @@ def _expected_audit_prompt(
     return f"""You are the independent merge-gating auditor. You are not the implementer.
 
 Repository: {repository_name}
-Authoritative audit base policy SHA: {_REQUIRED_AUDIT_BASE_SHA}
 Exact base SHA: {facts["base"]}
 Exact head SHA: {facts["head"]}
 PR: {facts["pr"] or "not supplied"}
